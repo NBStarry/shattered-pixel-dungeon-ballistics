@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>破碎像素地牢 - 弹道计算器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #toolbar {
+            background: #16213e;
+            padding: 10px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        .tool-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+            min-width: 60px;
+        }
+        
+        .tool-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .tool-btn.active {
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
+        }
+        
+        .tool-btn.player { background: #4ecca3; color: #000; }
+        .tool-btn.enemy { background: #ff6b6b; color: #fff; }
+        .tool-btn.obstacle { background: #ffd93d; color: #000; }
+        .tool-btn.wall { background: #6c757d; color: #fff; }
+        .tool-btn.clear { background: #e74c3c; color: #fff; }
+        .tool-btn.calc { background: #3498db; color: #fff; }
+        
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #0f3460;
+        }
+        
+        #grid-canvas {
+            display: block;
+            touch-action: none;
+        }
+        
+        #info-panel {
+            background: #16213e;
+            padding: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            border-top: 2px solid #0f3460;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .status {
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        .status.safe { color: #4ecca3; }
+        .status.danger { color: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="toolbar">
+            <button class="tool-btn player" data-tool="player">🦸 玩家</button>
+            <button class="tool-btn enemy" data-tool="enemy">👹 敌人</button>
+            <button class="tool-btn obstacle" data-tool="obstacle">🛡️ 障碍物</button>
+            <button class="tool-btn wall" data-tool="wall">🧱 墙体</button>
+            <button class="tool-btn calc" id="calc-btn">🎯 计算弹道</button>
+            <button class="tool-btn clear" id="clear-btn">🗑️ 清空</button>
+            <select id="scenario-select" class="tool-btn" style="background:#9b59b6; color:#fff; padding:8px;">
+                <option value="">📚 加载场景</option>
+            </select>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="grid-canvas"></canvas>
+        </div>
+        
+        <div id="info-panel">
+            <div class="status" id="status">点击工具栏选择要放置的对象，然后点击网格放置</div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#4ecca3"></div>
+                    <span>安全弹道</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#ff6b6b"></div>
+                    <span>危险弹道</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#ffd93d"></div>
+                    <span>推荐位置</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
