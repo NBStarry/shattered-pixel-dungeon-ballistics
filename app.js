@@ -195,42 +195,98 @@ class BallisticsCalculator {
         if (safe === false) status.classList.add('danger');
     }
     
-    // Bresenham直线算法 - 检测路径上是否有障碍物
+    // 弹道算法 - 基于破碎像素地牢源码的实现
+    // 参考: shattered-pixel-dungeon/core/src/main/java/.../mechanics/Ballistica.java
     checkLineOfSight(x0, y0, x1, y1) {
         const points = [];
-        const dx = Math.abs(x1 - x0);
-        const dy = Math.abs(y1 - y0);
-        const sx = x0 < x1 ? 1 : -1;
-        const sy = y0 < y1 ? 1 : -1;
-        let err = dx - dy;
+        
+        // 计算差值和方向
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        
+        const stepX = dx > 0 ? 1 : -1;
+        const stepY = dy > 0 ? 1 : -1;
+        
+        dx = Math.abs(dx);
+        dy = Math.abs(dy);
+        
+        // 确定主轴和副轴（与游戏源码一致）
+        let stepA, stepB, dA, dB;
+        let isXMajor;
+        
+        if (dx > dy) {
+            // X轴为主轴
+            stepA = stepX;
+            stepB = stepY;
+            dA = dx;
+            dB = dy;
+            isXMajor = true;
+        } else {
+            // Y轴为主轴
+            stepA = stepY;
+            stepB = stepX;
+            dA = dy;
+            dB = dx;
+            isXMajor = false;
+        }
         
         let x = x0;
         let y = y0;
+        let err = Math.floor(dA / 2);
+        let collisionPos = null;
+        let previousCell = null;
         
-        while (true) {
-            points.push({ x, y });
+        // 遍历路径
+        while (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+            const currentCell = { x, y };
             
-            if (x === x1 && y === y1) break;
-            
-            const e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x += sx;
+            // 检查当前格子是否为障碍物或墙体（不包括起点）
+            if (!(x === x0 && y === y0)) {
+                const hasObstacle = this.entities.obstacles.some(o => o.x === x && o.y === y);
+                const hasWall = this.entities.walls.some(w => w.x === x && w.y === y);
+                
+                if (hasWall || hasObstacle) {
+                    // 游戏机制：碰撞发生在solid地形的前一个格子
+                    if (previousCell) {
+                        collisionPos = previousCell;
+                    } else {
+                        collisionPos = currentCell;
+                    }
+                    points.push(currentCell);
+                    break;
+                }
             }
-            if (e2 < dx) {
-                err += dx;
-                y += sy;
+            
+            points.push(currentCell);
+            
+            // 到达目标点
+            if (x === x1 && y === y1) {
+                break;
+            }
+            
+            previousCell = { x, y };
+            
+            // 主轴步进
+            if (isXMajor) {
+                x += stepA;
+            } else {
+                y += stepA;
+            }
+            
+            // 副轴根据累积误差步进
+            err += dB;
+            if (err >= dA) {
+                err -= dA;
+                if (isXMajor) {
+                    y += stepB;
+                } else {
+                    x += stepB;
+                }
             }
         }
         
-        // 检查路径上是否有障碍物或墙体（不包括起点和终点）
-        for (let i = 1; i < points.length - 1; i++) {
-            const p = points[i];
-            const hasObstacle = this.entities.obstacles.some(o => o.x === p.x && o.y === p.y);
-            const hasWall = this.entities.walls.some(w => w.x === p.x && w.y === p.y);
-            if (hasObstacle || hasWall) {
-                return { blocked: true, points, blocker: p };
-            }
+        if (collisionPos) {
+            return { blocked: true, points, blocker: collisionPos };
         }
         
         return { blocked: false, points };
