@@ -15,6 +15,11 @@ class BallisticsCalculator {
         this.targetCell = null;
         this.playerTrajectory = null;
         
+        // 新增：撤销/恢复历史
+        this.history = [];
+        this.historyIndex = -1;
+        this.maxHistory = 50;
+        
         this.entities = {
             players: [],
             enemies: [],
@@ -33,6 +38,7 @@ class BallisticsCalculator {
         this.setupCanvas();
         this.loadScenarios();
         this.setupEventListeners();
+        this.saveState(); // 保存初始状态
         this.draw();
         window.addEventListener('resize', () => this.setupCanvas());
     }
@@ -70,7 +76,81 @@ class BallisticsCalculator {
         this.trajectories = [];
         this.recommendedPositions = [];
         this.updateStatus(`已加载场景: ${scenario.name} - ${scenario.description}`);
+        this.saveState();
         this.draw();
+    }
+    
+    // 保存当前状态到历史
+    saveState() {
+        // 移除当前索引之后的所有历史（分支被覆盖）
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        
+        // 保存当前状态
+        const state = {
+            entities: JSON.parse(JSON.stringify(this.entities)),
+            showCalculation: this.showCalculation,
+            attackMode: this.attackMode,
+            trajectories: JSON.parse(JSON.stringify(this.trajectories)),
+            recommendedPositions: JSON.parse(JSON.stringify(this.recommendedPositions))
+        };
+        
+        this.history.push(state);
+        this.historyIndex++;
+        
+        // 限制历史长度
+        if (this.history.length > this.maxHistory) {
+            this.history.shift();
+            this.historyIndex--;
+        }
+        
+        this.updateUndoRedoButtons();
+    }
+    
+    // 撤销
+    undo() {
+        if (this.historyIndex <= 0) return;
+        
+        this.historyIndex--;
+        this.restoreState(this.history[this.historyIndex]);
+        this.updateStatus('↶ 已撤销');
+    }
+    
+    // 恢复
+    redo() {
+        if (this.historyIndex >= this.history.length - 1) return;
+        
+        this.historyIndex++;
+        this.restoreState(this.history[this.historyIndex]);
+        this.updateStatus('↷ 已恢复');
+    }
+    
+    // 恢复状态
+    restoreState(state) {
+        this.entities = JSON.parse(JSON.stringify(state.entities));
+        this.showCalculation = state.showCalculation;
+        this.attackMode = state.attackMode;
+        this.trajectories = JSON.parse(JSON.stringify(state.trajectories));
+        this.recommendedPositions = JSON.parse(JSON.stringify(state.recommendedPositions));
+        this.targetCell = null;
+        this.playerTrajectory = null;
+        this.updateUndoRedoButtons();
+        this.draw();
+    }
+    
+    // 更新撤销/恢复按钮状态
+    updateUndoRedoButtons() {
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        
+        if (undoBtn) {
+            undoBtn.disabled = this.historyIndex <= 0;
+            undoBtn.style.opacity = undoBtn.disabled ? '0.5' : '1';
+        }
+        
+        if (redoBtn) {
+            redoBtn.disabled = this.historyIndex >= this.history.length - 1;
+            redoBtn.style.opacity = redoBtn.disabled ? '0.5' : '1';
+        }
     }
     
     setupCanvas() {
@@ -134,6 +214,34 @@ class BallisticsCalculator {
             this.draw();
         });
         
+        // 撤销/恢复按钮
+        document.getElementById('undo-btn').addEventListener('click', () => {
+            this.undo();
+        });
+        
+        document.getElementById('redo-btn').addEventListener('click', () => {
+            this.redo();
+        });
+        
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Z / Cmd+Z - 撤销
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                this.undo();
+            }
+            // Ctrl+Shift+Z / Cmd+Shift+Z - 恢复
+            else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+                e.preventDefault();
+                this.redo();
+            }
+            // Ctrl+Y / Cmd+Y - 恢复（替代方案）
+            else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                e.preventDefault();
+                this.redo();
+            }
+        });
+        
         document.getElementById('clear-btn').addEventListener('click', () => {
             if (confirm('确定要清空所有内容吗？')) {
                 this.entities = { players: [], enemies: [], obstacles: [], walls: [] };
@@ -144,6 +252,7 @@ class BallisticsCalculator {
                 this.targetCell = null;
                 this.playerTrajectory = null;
                 this.updateStatus('已清空所有内容');
+                this.saveState();
                 this.draw();
             }
         });
@@ -198,6 +307,7 @@ class BallisticsCalculator {
         
         this.showCalculation = false;
         this.attackMode = false;
+        this.saveState();
         this.draw();
     }
     
@@ -428,12 +538,18 @@ class BallisticsCalculator {
         const dangerous = this.trajectories.filter(t => !t.blocked).length;
         const attackPoints = this.recommendedAttackPositions.length;
         
+        // 如果有攻击点位，自动取消工具选择，让用户可以直接点击查看
+        if (attackPoints > 0) {
+            this.currentTool = null;
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+        }
+        
         if (dangerous === 0 && attackPoints > 0) {
-            this.updateStatus(`✅ 你是安全的！找到 ${attackPoints} 个建议攻击点位（蓝色）`, true);
+            this.updateStatus(`✅ 你是安全的！找到 ${attackPoints} 个建议攻击点位（蓝色），点击查看弹道`, true);
         } else if (dangerous === 0 && attackPoints === 0) {
             this.updateStatus('✅ 所有弹道已被阻挡！你是安全的！', true);
         } else if (attackPoints > 0) {
-            this.updateStatus(`⚠️ 有 ${dangerous} 条危险弹道！找到 ${attackPoints} 个建议攻击点位（蓝色）`, false);
+            this.updateStatus(`⚠️ 有 ${dangerous} 条危险弹道！找到 ${attackPoints} 个建议攻击点位（蓝色），点击查看弹道`, false);
         } else {
             this.updateStatus(`⚠️ 有 ${dangerous} 条弹道未被阻挡！请放置障碍物！`, false);
         }
