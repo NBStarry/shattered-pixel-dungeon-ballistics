@@ -1,16 +1,20 @@
-// 破碎像素地牢 - 弹道计算器
-// Grid-based ballistics calculator for Shattered Pixel Dungeon
+// 破碎像素地牢 - 弹道计算器 v2.0
+// 双向弹道系统 + 攻击模拟
 
 class BallisticsCalculator {
     constructor() {
         this.canvas = document.getElementById('grid-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.gridSize = 20; // 网格大小
-        this.cellSize = 30; // 每个格子的像素大小
+        this.gridSize = 20;
+        this.cellSize = 30;
         this.currentTool = null;
         this.showCalculation = false;
         
-        // 游戏实体
+        // 新增：攻击模式
+        this.attackMode = false;
+        this.targetCell = null;
+        this.playerTrajectory = null;
+        
         this.entities = {
             players: [],
             enemies: [],
@@ -18,11 +22,8 @@ class BallisticsCalculator {
             walls: []
         };
         
-        // 计算结果
         this.trajectories = [];
         this.recommendedPositions = [];
-        
-        // 场景数据
         this.scenarios = [];
         
         this.init();
@@ -63,6 +64,9 @@ class BallisticsCalculator {
         
         this.entities = JSON.parse(JSON.stringify(scenario.entities));
         this.showCalculation = false;
+        this.attackMode = false;
+        this.targetCell = null;
+        this.playerTrajectory = null;
         this.trajectories = [];
         this.recommendedPositions = [];
         this.updateStatus(`已加载场景: ${scenario.name} - ${scenario.description}`);
@@ -79,46 +83,46 @@ class BallisticsCalculator {
     }
     
     setupEventListeners() {
-        // 工具按钮
         document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentTool = e.target.dataset.tool;
+                this.attackMode = false;
                 this.showCalculation = false;
                 this.updateStatus(`已选择: ${this.getToolName(this.currentTool)}`);
                 this.draw();
             });
         });
         
-        // 计算按钮
         document.getElementById('calc-btn').addEventListener('click', () => {
             this.calculateTrajectories();
             this.showCalculation = true;
+            this.attackMode = false;
             this.draw();
         });
         
-        // 清空按钮
         document.getElementById('clear-btn').addEventListener('click', () => {
             if (confirm('确定要清空所有内容吗？')) {
                 this.entities = { players: [], enemies: [], obstacles: [], walls: [] };
                 this.trajectories = [];
                 this.recommendedPositions = [];
                 this.showCalculation = false;
+                this.attackMode = false;
+                this.targetCell = null;
+                this.playerTrajectory = null;
                 this.updateStatus('已清空所有内容');
                 this.draw();
             }
         });
         
-        // 场景选择
         document.getElementById('scenario-select').addEventListener('change', (e) => {
             if (e.target.value) {
                 this.loadScenario(e.target.value);
-                e.target.value = ''; // 重置选择器
+                e.target.value = '';
             }
         });
         
-        // Canvas点击/触摸
         this.canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -128,20 +132,30 @@ class BallisticsCalculator {
     }
     
     handleCanvasClick(e) {
-        if (!this.currentTool) {
-            this.updateStatus('请先选择要放置的对象');
-            return;
-        }
-        
         const rect = this.canvas.getBoundingClientRect();
         const x = Math.floor((e.clientX - rect.left) / this.cellSize);
         const y = Math.floor((e.clientY - rect.top) / this.cellSize);
         
         if (x < 0 || x >= this.gridSize || y < 0 || y >= this.gridSize) return;
         
-        const pos = { x, y };
+        // 攻击模式：点击显示弹道
+        if (!this.currentTool) {
+            if (this.entities.players.length === 0) {
+                this.updateStatus('请先放置玩家位置！');
+                return;
+            }
+            
+            this.attackMode = true;
+            this.targetCell = { x, y };
+            this.calculatePlayerAttack();
+            this.calculateEnemyTrajectories();
+            this.updateAttackStatus();
+            this.draw();
+            return;
+        }
         
-        // 检查是否已有实体
+        // 放置模式
+        const pos = { x, y };
         if (this.hasEntityAt(x, y)) {
             this.removeEntityAt(x, y);
             this.updateStatus(`已移除 (${x}, ${y}) 的对象`);
@@ -151,6 +165,7 @@ class BallisticsCalculator {
         }
         
         this.showCalculation = false;
+        this.attackMode = false;
         this.draw();
     }
     
@@ -170,7 +185,6 @@ class BallisticsCalculator {
     }
     
     addEntity(type, pos) {
-        // 正确的单数到复数映射
         const typeMap = {
             'player': 'players',
             'enemy': 'enemies',
@@ -180,7 +194,7 @@ class BallisticsCalculator {
         const key = typeMap[type];
         
         if (type === 'player' && this.entities.players.length > 0) {
-            this.entities.players = []; // 只允许一个玩家
+            this.entities.players = [];
         }
         this.entities[key].push(pos);
     }
@@ -203,12 +217,10 @@ class BallisticsCalculator {
         if (safe === false) status.classList.add('danger');
     }
     
-    // 弹道算法 - 基于破碎像素地牢源码的实现
-    // 参考: shattered-pixel-dungeon/core/src/main/java/.../mechanics/Ballistica.java
+    // 弹道算法 - 基于破碎像素地牢源码
     checkLineOfSight(x0, y0, x1, y1) {
         const points = [];
         
-        // 计算差值和方向
         let dx = x1 - x0;
         let dy = y1 - y0;
         
@@ -218,19 +230,16 @@ class BallisticsCalculator {
         dx = Math.abs(dx);
         dy = Math.abs(dy);
         
-        // 确定主轴和副轴（与游戏源码一致）
         let stepA, stepB, dA, dB;
         let isXMajor;
         
         if (dx > dy) {
-            // X轴为主轴
             stepA = stepX;
             stepB = stepY;
             dA = dx;
             dB = dy;
             isXMajor = true;
         } else {
-            // Y轴为主轴
             stepA = stepY;
             stepB = stepX;
             dA = dy;
@@ -244,17 +253,14 @@ class BallisticsCalculator {
         let collisionPos = null;
         let previousCell = null;
         
-        // 遍历路径
         while (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
             const currentCell = { x, y };
             
-            // 检查当前格子是否为障碍物或墙体（不包括起点）
             if (!(x === x0 && y === y0)) {
                 const hasObstacle = this.entities.obstacles.some(o => o.x === x && o.y === y);
                 const hasWall = this.entities.walls.some(w => w.x === x && w.y === y);
                 
                 if (hasWall || hasObstacle) {
-                    // 游戏机制：碰撞发生在solid地形的前一个格子
                     if (previousCell) {
                         collisionPos = previousCell;
                     } else {
@@ -267,21 +273,18 @@ class BallisticsCalculator {
             
             points.push(currentCell);
             
-            // 到达目标点
             if (x === x1 && y === y1) {
                 break;
             }
             
             previousCell = { x, y };
             
-            // 主轴步进
             if (isXMajor) {
                 x += stepA;
             } else {
                 y += stepA;
             }
             
-            // 副轴根据累积误差步进
             err += dB;
             if (err >= dA) {
                 err -= dA;
@@ -298,6 +301,52 @@ class BallisticsCalculator {
         }
         
         return { blocked: false, points };
+    }
+    
+    // 计算玩家攻击
+    calculatePlayerAttack() {
+        if (!this.targetCell || this.entities.players.length === 0) {
+            this.playerTrajectory = null;
+            return;
+        }
+        
+        const player = this.entities.players[0];
+        const result = this.checkLineOfSight(player.x, player.y, this.targetCell.x, this.targetCell.y);
+        
+        // 检查路径上是否有敌人
+        const hitEnemies = [];
+        for (const point of result.points) {
+            const enemy = this.entities.enemies.find(e => e.x === point.x && e.y === point.y);
+            if (enemy && !(point.x === player.x && point.y === player.y)) {
+                hitEnemies.push(enemy);
+            }
+        }
+        
+        this.playerTrajectory = {
+            ...result,
+            hitEnemies,
+            canHit: hitEnemies.length > 0
+        };
+    }
+    
+    // 计算敌人弹道
+    calculateEnemyTrajectories() {
+        this.trajectories = [];
+        
+        if (this.entities.players.length === 0 || this.entities.enemies.length === 0) {
+            return;
+        }
+        
+        const player = this.entities.players[0];
+        
+        this.entities.enemies.forEach(enemy => {
+            const result = this.checkLineOfSight(enemy.x, enemy.y, player.x, player.y);
+            this.trajectories.push({
+                enemy,
+                player,
+                ...result
+            });
+        });
     }
     
     calculateTrajectories() {
@@ -317,7 +366,6 @@ class BallisticsCalculator {
         const player = this.entities.players[0];
         let allBlocked = true;
         
-        // 计算每个敌人到玩家的弹道
         this.entities.enemies.forEach(enemy => {
             const result = this.checkLineOfSight(enemy.x, enemy.y, player.x, player.y);
             this.trajectories.push({
@@ -328,12 +376,10 @@ class BallisticsCalculator {
             
             if (!result.blocked) {
                 allBlocked = false;
-                // 如果弹道未被阻挡，计算推荐位置
                 this.calculateRecommendedPositions(enemy, player, result.points);
             }
         });
         
-        // 更新状态
         if (allBlocked) {
             this.updateStatus('✅ 所有弹道已被阻挡！你是安全的！', true);
         } else {
@@ -342,8 +388,23 @@ class BallisticsCalculator {
         }
     }
     
+    updateAttackStatus() {
+        if (!this.playerTrajectory || !this.targetCell) return;
+        
+        const enemyCanHit = this.trajectories.some(t => !t.blocked);
+        
+        if (this.playerTrajectory.canHit && !enemyCanHit) {
+            this.updateStatus(`🎯 完美！你能打到敌人，敌人打不到你！`, true);
+        } else if (this.playerTrajectory.canHit && enemyCanHit) {
+            this.updateStatus(`⚠️ 你能打到敌人，但敌人也能打到你！`, null);
+        } else if (!this.playerTrajectory.canHit && !enemyCanHit) {
+            this.updateStatus(`✅ 你打不到敌人，但敌人也打不到你（安全）`, true);
+        } else {
+            this.updateStatus(`❌ 你打不到敌人，但敌人能打到你！危险！`, false);
+        }
+    }
+    
     calculateRecommendedPositions(enemy, player, pathPoints) {
-        // 推荐放置障碍物的位置（弹道路径上，不包括起点终点）
         for (let i = 1; i < pathPoints.length - 1; i++) {
             const p = pathPoints[i];
             if (!this.hasEntityAt(p.x, p.y)) {
@@ -358,16 +419,19 @@ class BallisticsCalculator {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // 绘制网格
         this.drawGrid();
         
-        // 如果显示计算结果，先绘制弹道和推荐位置
         if (this.showCalculation) {
             this.drawTrajectories();
             this.drawRecommendedPositions();
         }
         
-        // 绘制实体（最后绘制，确保在最上层）
+        if (this.attackMode && this.playerTrajectory) {
+            this.drawPlayerTrajectory();
+            this.drawEnemyTrajectories();
+            this.drawTargetCell();
+        }
+        
         this.drawEntities();
     }
     
@@ -390,6 +454,81 @@ class BallisticsCalculator {
         }
     }
     
+    drawPlayerTrajectory() {
+        if (!this.playerTrajectory) return;
+        
+        const ctx = this.ctx;
+        const traj = this.playerTrajectory;
+        
+        // 玩家弹道：绿色=能打到，灰色=打不到
+        ctx.strokeStyle = traj.canHit ? '#4ecca3' : '#888888';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
+        
+        ctx.beginPath();
+        for (let i = 0; i < traj.points.length; i++) {
+            const p = traj.points[i];
+            const px = p.x * this.cellSize + this.cellSize / 2;
+            const py = p.y * this.cellSize + this.cellSize / 2;
+            
+            if (i === 0) {
+                ctx.moveTo(px, py);
+            } else {
+                ctx.lineTo(px, py);
+            }
+        }
+        ctx.stroke();
+        
+        // 标记命中的敌人
+        if (traj.hitEnemies && traj.hitEnemies.length > 0) {
+            traj.hitEnemies.forEach(enemy => {
+                const ex = enemy.x * this.cellSize + this.cellSize / 2;
+                const ey = enemy.y * this.cellSize + this.cellSize / 2;
+                
+                ctx.strokeStyle = '#4ecca3';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(ex, ey, this.cellSize / 2.5, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+        }
+    }
+    
+    drawEnemyTrajectories() {
+        const ctx = this.ctx;
+        
+        this.trajectories.forEach(traj => {
+            // 敌人弹道：红色=危险，橙色虚线=安全
+            ctx.strokeStyle = traj.blocked ? '#ff9a3c' : '#ff6b6b';
+            ctx.lineWidth = 3;
+            ctx.setLineDash(traj.blocked ? [5, 5] : []);
+            
+            ctx.beginPath();
+            const startX = traj.enemy.x * this.cellSize + this.cellSize / 2;
+            const startY = traj.enemy.y * this.cellSize + this.cellSize / 2;
+            const endX = traj.player.x * this.cellSize + this.cellSize / 2;
+            const endY = traj.player.y * this.cellSize + this.cellSize / 2;
+            
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+            
+            ctx.setLineDash([]);
+        });
+    }
+    
+    drawTargetCell() {
+        if (!this.targetCell) return;
+        
+        const ctx = this.ctx;
+        const x = this.targetCell.x * this.cellSize;
+        const y = this.targetCell.y * this.cellSize;
+        
+        ctx.strokeStyle = '#ffd93d';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 2, y + 2, this.cellSize - 4, this.cellSize - 4);
+    }
+    
     drawTrajectories() {
         const ctx = this.ctx;
         
@@ -410,7 +549,6 @@ class BallisticsCalculator {
             
             ctx.setLineDash([]);
             
-            // 如果被阻挡，标记阻挡点
             if (traj.blocked && traj.blocker) {
                 const bx = traj.blocker.x * this.cellSize + this.cellSize / 2;
                 const by = traj.blocker.y * this.cellSize + this.cellSize / 2;
@@ -434,7 +572,6 @@ class BallisticsCalculator {
                 this.cellSize - 4
             );
             
-            // 绘制边框
             ctx.strokeStyle = '#ffd93d';
             ctx.lineWidth = 2;
             ctx.strokeRect(
@@ -449,7 +586,6 @@ class BallisticsCalculator {
     drawEntities() {
         const ctx = this.ctx;
         
-        // 绘制墙体
         ctx.fillStyle = '#6c757d';
         this.entities.walls.forEach(wall => {
             ctx.fillRect(
@@ -460,7 +596,6 @@ class BallisticsCalculator {
             );
         });
         
-        // 绘制障碍物
         ctx.fillStyle = '#ffd93d';
         this.entities.obstacles.forEach(obs => {
             ctx.beginPath();
@@ -470,7 +605,6 @@ class BallisticsCalculator {
             ctx.fill();
         });
         
-        // 绘制敌人
         ctx.fillStyle = '#ff6b6b';
         this.entities.enemies.forEach(enemy => {
             ctx.beginPath();
@@ -484,7 +618,6 @@ class BallisticsCalculator {
             ctx.fill();
         });
         
-        // 绘制玩家
         ctx.fillStyle = '#4ecca3';
         this.entities.players.forEach(player => {
             ctx.fillRect(
@@ -495,7 +628,6 @@ class BallisticsCalculator {
             );
         });
         
-        // 绘制图标文字
         ctx.font = `${this.cellSize * 0.6}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -517,7 +649,6 @@ class BallisticsCalculator {
     }
 }
 
-// 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
     new BallisticsCalculator();
 });
