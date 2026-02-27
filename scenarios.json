@@ -1,24 +1,28 @@
 {
   "scenarios": [
     {
-      "id": "basic",
-      "name": "基础示例",
-      "description": "最简单的挡弹道示例",
+      "id": "corner_advantage",
+      "name": "拐角优势",
+      "description": "经典战术：躲在墙角，敌人直线弹道被挡，你可以斜向攻击",
       "entities": {
-        "players": [{"x": 10, "y": 15}],
-        "enemies": [{"x": 10, "y": 5}],
+        "players": [{"x": 8, "y": 12}],
+        "enemies": [{"x": 12, "y": 8}],
         "obstacles": [],
-        "walls": []
+        "walls": [
+          {"x": 10, "y": 10},
+          {"x": 11, "y": 10},
+          {"x": 10, "y": 11}
+        ]
       }
     },
     {
-      "id": "tengu_phase1",
-      "name": "天狗战-第一阶段",
-      "description": "天狗第一阶段，使用哨卫挡弹道",
+      "id": "doorway_block",
+      "name": "门口卡位",
+      "description": "站在门后，门框挡住敌人弹道，你可以打到敌人",
       "entities": {
-        "players": [{"x": 10, "y": 15}],
-        "enemies": [{"x": 10, "y": 5}],
-        "obstacles": [{"x": 10, "y": 10}],
+        "players": [{"x": 10, "y": 14}],
+        "enemies": [{"x": 10, "y": 6}],
+        "obstacles": [],
         "walls": [
           {"x": 8, "y": 10},
           {"x": 9, "y": 10},
@@ -28,69 +32,75 @@
       }
     },
     {
-      "id": "multi_enemy",
-      "name": "多敌人包围",
-      "description": "被多个远程敌人包围时的挡弹道策略",
+      "id": "diagonal_trick",
+      "name": "对角线技巧",
+      "description": "利用对角线弹道，绕过中间障碍物",
       "entities": {
-        "players": [{"x": 10, "y": 10}],
-        "enemies": [
-          {"x": 5, "y": 5},
-          {"x": 15, "y": 5},
-          {"x": 5, "y": 15},
-          {"x": 15, "y": 15}
-        ],
-        "obstacles": [],
+        "players": [{"x": 7, "y": 13}],
+        "enemies": [{"x": 13, "y": 7}],
+        "obstacles": [{"x": 10, "y": 10}],
         "walls": []
       }
     },
     {
-      "id": "corridor_ambush",
-      "name": "走廊伏击",
-      "description": "利用走廊地形优势",
+      "id": "grass_cover",
+      "name": "草丛掩护",
+      "description": "障碍物（草/幽妹）挡住敌人视线，你可以侧向攻击",
       "entities": {
-        "players": [{"x": 10, "y": 15}],
-        "enemies": [{"x": 10, "y": 5}],
-        "obstacles": [],
+        "players": [{"x": 8, "y": 10}],
+        "enemies": [{"x": 12, "y": 10}],
+        "obstacles": [{"x": 10, "y": 10}],
+        "walls": []
+      }
+    },
+    {
+      "id": "tengu_phase1",
+      "name": "天狗战法",
+      "description": "天狗第一阶段：哨卫/幽妹挡弹道，走位保持安全距离",
+      "entities": {
+        "players": [{"x": 6, "y": 14}],
+        "enemies": [{"x": 14, "y": 6}],
+        "obstacles": [
+          {"x": 10, "y": 10},
+          {"x": 11, "y": 11}
+        ],
         "walls": [
           {"x": 8, "y": 8},
           {"x": 9, "y": 8},
           {"x": 11, "y": 8},
-          {"x": 12, "y": 8},
-          {"x": 8, "y": 12},
-          {"x": 9, "y": 12},
-          {"x": 11, "y": 12},
-          {"x": 12, "y": 12}
+          {"x": 12, "y": 8}
         ]
       }
     },
     {
-      "id": "room_defense",
-      "name": "房间防守",
-      "description": "在房间门口放置障碍物防守",
+      "id": "multi_enemy_safe",
+      "name": "多敌围攻·安全点",
+      "description": "被包围时，找到所有敌人都打不到你的位置",
       "entities": {
-        "players": [{"x": 10, "y": 15}],
+        "players": [{"x": 10, "y": 10}],
         "enemies": [
-          {"x": 5, "y": 5},
-          {"x": 10, "y": 5},
-          {"x": 15, "y": 5}
+          {"x": 6, "y": 6},
+          {"x": 14, "y": 6},
+          {"x": 6, "y": 14}
         ],
+        "obstacles": [
+          {"x": 8, "y": 8},
+          {"x": 12, "y": 8},
+          {"x": 8, "y": 12}
+        ],
+        "walls": []
+      }
+    },
+    {
+      "id": "click_beside_enemy",
+      "name": "点击旁边格子",
+      "description": "高级技巧：点击敌人旁边的空地，弹道绕过障碍物打中敌人",
+      "entities": {
+        "players": [{"x": 6, "y": 10}],
+        "enemies": [{"x": 14, "y": 10}],
         "obstacles": [{"x": 10, "y": 10}],
-        "walls": [
-          {"x": 6, "y": 12},
-          {"x": 7, "y": 12},
-          {"x": 8, "y": 12},
-          {"x": 12, "y": 12},
-          {"x": 13, "y": 12},
-          {"x": 14, "y": 12},
-          {"x": 6, "y": 13},
-          {"x": 6, "y": 14},
-          {"x": 6, "y": 15},
-          {"x": 6, "y": 16},
-          {"x": 14, "y": 13},
-          {"x": 14, "y": 14},
-          {"x": 14, "y": 15},
-          {"x": 14, "y": 16}
-        ]
+        "walls": [],
+        "hint": "试试点击(14, 9)或(14, 11)，弹道会绕过障碍物！"
       }
     }
   ]

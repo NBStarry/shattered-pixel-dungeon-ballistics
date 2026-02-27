@@ -170,7 +170,15 @@ class BallisticsCalculator {
     }
     
     addEntity(type, pos) {
-        const key = type + 's'; // player -> players
+        // 正确的单数到复数映射
+        const typeMap = {
+            'player': 'players',
+            'enemy': 'enemies',
+            'obstacle': 'obstacles',
+            'wall': 'walls'
+        };
+        const key = typeMap[type];
+        
         if (type === 'player' && this.entities.players.length > 0) {
             this.entities.players = []; // 只允许一个玩家
         }
