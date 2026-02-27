@@ -601,17 +601,32 @@ class BallisticsCalculator {
             ctx.lineWidth = 3;
             ctx.setLineDash(traj.blocked ? [5, 5] : []);
             
+            // 沿着实际弹道路径绘制
             ctx.beginPath();
-            const startX = traj.enemy.x * this.cellSize + this.cellSize / 2;
-            const startY = traj.enemy.y * this.cellSize + this.cellSize / 2;
-            const endX = traj.player.x * this.cellSize + this.cellSize / 2;
-            const endY = traj.player.y * this.cellSize + this.cellSize / 2;
-            
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(endX, endY);
+            for (let i = 0; i < traj.points.length; i++) {
+                const p = traj.points[i];
+                const px = p.x * this.cellSize + this.cellSize / 2;
+                const py = p.y * this.cellSize + this.cellSize / 2;
+                
+                if (i === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
             ctx.stroke();
             
             ctx.setLineDash([]);
+            
+            // 标记阻挡点
+            if (traj.blocked && traj.blocker) {
+                const bx = traj.blocker.x * this.cellSize + this.cellSize / 2;
+                const by = traj.blocker.y * this.cellSize + this.cellSize / 2;
+                ctx.fillStyle = '#ff9a3c';
+                ctx.beginPath();
+                ctx.arc(bx, by, 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
         });
     }
     
@@ -635,18 +650,24 @@ class BallisticsCalculator {
             ctx.lineWidth = 3;
             ctx.setLineDash(traj.blocked ? [5, 5] : []);
             
+            // 沿着实际弹道路径绘制
             ctx.beginPath();
-            const startX = traj.enemy.x * this.cellSize + this.cellSize / 2;
-            const startY = traj.enemy.y * this.cellSize + this.cellSize / 2;
-            const endX = traj.player.x * this.cellSize + this.cellSize / 2;
-            const endY = traj.player.y * this.cellSize + this.cellSize / 2;
-            
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(endX, endY);
+            for (let i = 0; i < traj.points.length; i++) {
+                const p = traj.points[i];
+                const px = p.x * this.cellSize + this.cellSize / 2;
+                const py = p.y * this.cellSize + this.cellSize / 2;
+                
+                if (i === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
             ctx.stroke();
             
             ctx.setLineDash([]);
             
+            // 标记阻挡点
             if (traj.blocked && traj.blocker) {
                 const bx = traj.blocker.x * this.cellSize + this.cellSize / 2;
                 const by = traj.blocker.y * this.cellSize + this.cellSize / 2;
