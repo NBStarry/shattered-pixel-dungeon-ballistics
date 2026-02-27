@@ -83,22 +83,54 @@ class BallisticsCalculator {
     }
     
     setupEventListeners() {
+        // 工具按钮 - 支持点击取消选择
         document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentTool = e.target.dataset.tool;
-                this.attackMode = false;
-                this.showCalculation = false;
-                this.updateStatus(`已选择: ${this.getToolName(this.currentTool)}`);
+                const tool = e.target.dataset.tool;
+                
+                // 如果点击已选中的工具，取消选择
+                if (this.currentTool === tool) {
+                    e.target.classList.remove('active');
+                    this.currentTool = null;
+                    this.attackMode = false;
+                    this.showCalculation = false;
+                    this.updateStatus('工具已取消，点击网格进入攻击模式');
+                } else {
+                    // 选择新工具
+                    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                    document.getElementById('attack-btn').classList.remove('active');
+                    e.target.classList.add('active');
+                    this.currentTool = tool;
+                    this.attackMode = false;
+                    this.showCalculation = false;
+                    this.updateStatus(`已选择: ${this.getToolName(this.currentTool)}`);
+                }
                 this.draw();
             });
         });
         
+        // 攻击模式按钮
+        document.getElementById('attack-btn').addEventListener('click', () => {
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+            document.getElementById('attack-btn').classList.toggle('active');
+            
+            if (document.getElementById('attack-btn').classList.contains('active')) {
+                this.currentTool = null;
+                this.attackMode = false;
+                this.showCalculation = false;
+                this.updateStatus('⚔️ 攻击模式：点击网格任意位置查看弹道');
+            } else {
+                this.attackMode = false;
+                this.updateStatus('攻击模式已关闭');
+            }
+            this.draw();
+        });
+        
         document.getElementById('calc-btn').addEventListener('click', () => {
-            this.calculateTrajectories();
+            this.calculateTrajectoriesWithRecommendations();
             this.showCalculation = true;
             this.attackMode = false;
+            document.getElementById('attack-btn').classList.remove('active');
             this.draw();
         });
         
@@ -388,6 +420,71 @@ class BallisticsCalculator {
         }
     }
     
+    calculateTrajectoriesWithRecommendations() {
+        this.calculateTrajectories();
+        this.calculateRecommendedAttackPositions();
+        
+        // 更新状态消息，包含建议攻击点位信息
+        const dangerous = this.trajectories.filter(t => !t.blocked).length;
+        const attackPoints = this.recommendedAttackPositions.length;
+        
+        if (dangerous === 0 && attackPoints > 0) {
+            this.updateStatus(`✅ 你是安全的！找到 ${attackPoints} 个建议攻击点位（蓝色）`, true);
+        } else if (dangerous === 0 && attackPoints === 0) {
+            this.updateStatus('✅ 所有弹道已被阻挡！你是安全的！', true);
+        } else if (attackPoints > 0) {
+            this.updateStatus(`⚠️ 有 ${dangerous} 条危险弹道！找到 ${attackPoints} 个建议攻击点位（蓝色）`, false);
+        } else {
+            this.updateStatus(`⚠️ 有 ${dangerous} 条弹道未被阻挡！请放置障碍物！`, false);
+        }
+    }
+    
+    calculateRecommendedAttackPositions() {
+        this.recommendedAttackPositions = [];
+        
+        if (this.entities.players.length === 0 || this.entities.enemies.length === 0) {
+            return;
+        }
+        
+        const player = this.entities.players[0];
+        
+        // 遍历网格中的所有位置（排除已有实体的位置）
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                if (this.hasEntityAt(x, y)) continue;
+                
+                // 检查从玩家到该位置的弹道
+                const playerShot = this.checkLineOfSight(player.x, player.y, x, y);
+                
+                // 检查该弹道是否能打到任何敌人
+                const hitEnemies = [];
+                for (const point of playerShot.points) {
+                    const enemy = this.entities.enemies.find(e => e.x === point.x && e.y === point.y);
+                    if (enemy && !(point.x === player.x && point.y === player.y)) {
+                        hitEnemies.push(enemy);
+                    }
+                }
+                
+                if (hitEnemies.length === 0) continue;
+                
+                // 检查所有敌人是否都打不到玩家
+                const allEnemiesBlocked = this.entities.enemies.every(enemy => {
+                    const enemyShot = this.checkLineOfSight(enemy.x, enemy.y, player.x, player.y);
+                    return enemyShot.blocked;
+                });
+                
+                // 如果能打到敌人且所有敌人都打不到玩家，推荐这个位置
+                if (allEnemiesBlocked) {
+                    this.recommendedAttackPositions.push({ 
+                        x, 
+                        y, 
+                        hitCount: hitEnemies.length 
+                    });
+                }
+            }
+        }
+    }
+    
     updateAttackStatus() {
         if (!this.playerTrajectory || !this.targetCell) return;
         
@@ -424,6 +521,7 @@ class BallisticsCalculator {
         if (this.showCalculation) {
             this.drawTrajectories();
             this.drawRecommendedPositions();
+            this.drawRecommendedAttackPositions();
         }
         
         if (this.attackMode && this.playerTrajectory) {
@@ -580,6 +678,43 @@ class BallisticsCalculator {
                 this.cellSize - 4,
                 this.cellSize - 4
             );
+        });
+    }
+    
+    drawRecommendedAttackPositions() {
+        const ctx = this.ctx;
+        
+        this.recommendedAttackPositions.forEach(pos => {
+            // 蓝色/青色标记建议的攻击位置
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.5)';
+            ctx.fillRect(
+                pos.x * this.cellSize + 2,
+                pos.y * this.cellSize + 2,
+                this.cellSize - 4,
+                this.cellSize - 4
+            );
+            
+            ctx.strokeStyle = '#3498db';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(
+                pos.x * this.cellSize + 2,
+                pos.y * this.cellSize + 2,
+                this.cellSize - 4,
+                this.cellSize - 4
+            );
+            
+            // 显示命中数量
+            if (pos.hitCount > 0) {
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${this.cellSize * 0.5}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(
+                    pos.hitCount.toString(),
+                    pos.x * this.cellSize + this.cellSize / 2,
+                    pos.y * this.cellSize + this.cellSize / 2
+                );
+            }
         });
     }
     

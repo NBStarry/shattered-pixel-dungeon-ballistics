@@ -120,6 +120,7 @@
             <button class="tool-btn obstacle" data-tool="obstacle">🛡️ 障碍物</button>
             <button class="tool-btn wall" data-tool="wall">🧱 墙体</button>
             <button class="tool-btn calc" id="calc-btn">🎯 计算弹道</button>
+            <button class="tool-btn" id="attack-btn" style="background:#27ae60; color:#fff;">⚔️ 攻击模式</button>
             <button class="tool-btn clear" id="clear-btn">🗑️ 清空</button>
             <select id="scenario-select" class="tool-btn" style="background:#9b59b6; color:#fff; padding:8px;">
                 <option value="">📚 加载场景</option>
@@ -143,7 +144,11 @@
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background:#ffd93d"></div>
-                    <span>推荐位置</span>
+                    <span>防御位置</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#3498db"></div>
+                    <span>攻击点位</span>
                 </div>
             </div>
         </div>
